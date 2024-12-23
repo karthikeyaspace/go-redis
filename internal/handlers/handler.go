@@ -2,7 +2,9 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/karthikeyaspace/game-leaderboard/internal/services"
 )
@@ -77,7 +79,6 @@ func (h *Handler) UpdateScoreHandler(w http.ResponseWriter, r *http.Request) {
 
 // Get the leaderboard - /leaderboard?limit=n
 func (h *Handler) GetLeaderboardHandler(w http.ResponseWriter, r *http.Request) {
-	// get limit from request, get leaderboard with limit
 	lim := r.URL.Query().Get("limit")
 	if lim == "" {
 		lim = "10"
@@ -100,6 +101,42 @@ func (h *Handler) GetLeaderboardHandler(w http.ResponseWriter, r *http.Request) 
 		"success":     true,
 		"leaderboard": users,
 	})
+}
+
+// realtime time event stream using sse
+func (h *Handler) GetLeaderboardHandlerStream(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+
+	clientDisconnect := r.Context().Done()
+	flusher := w.(http.Flusher)
+
+	for {
+		select {
+		case <-clientDisconnect:
+			return
+		default:
+			users, err := h.service.GetLeaderboardService("10")
+			if err != nil {
+				return
+			}
+
+			data := map[string]interface{}{
+				"success":     true,
+				"leaderboard": users,
+			}
+
+			jsonData, err := json.Marshal(data)
+			if err != nil {
+				return
+			}
+
+			fmt.Fprintf(w, "data: %s\n\n", jsonData)
+			flusher.Flush()
+			time.Sleep(2 * time.Second)
+		}
+	}
 }
 
 func (h *Handler) HomeHandler(w http.ResponseWriter, _ *http.Request) {

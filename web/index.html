@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Game Leaderboard</title>
+  </head>
+  <body>
+    <div id="app"></div>
+    <script>
+      document.querySelector("#app").innerHTML = "";
+
+      const app = document.querySelector("#app");
+
+      const createPlayerForm = document.createElement("form");
+      createPlayerForm.innerHTML = `
+        <h2>Create Player</h2>
+        <input type="text" id="playerName" placeholder="Enter player name" required>
+        <button type="submit">Create Player</button>
+      `;
+
+      const updateScoreForm = document.createElement("form");
+      updateScoreForm.innerHTML = `
+        <h2>Update Score</h2>
+        <input type="text" id="userId" placeholder="User ID" required>
+        <input type="number" id="score" placeholder="Score" required min="0">
+        <button type="submit">Update Score</button>
+      `;
+
+      const leaderboardSection = document.createElement("div");
+      leaderboardSection.innerHTML = `
+        <h2>Leaderboard</h2>
+        <input type="number" id="limit" value="10" min="1">
+        <button id="refreshBtn">Refresh</button>
+        <pre id="leaderboard"></pre>
+      `;
+
+      app.appendChild(createPlayerForm);
+      app.appendChild(updateScoreForm);
+      app.appendChild(leaderboardSection);
+
+      createPlayerForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const name = document.getElementById("playerName").value;
+
+        try {
+          const response = await fetch("http://localhost:8080/create-player", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            document.getElementById("playerName").value = "";
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      });
+
+      updateScoreForm.addEventListener("submit", async (e) => {
+        e.preventDefault();
+        const userId = document.getElementById("userId").value;
+        const score = parseInt(document.getElementById("score").value);
+
+        try {
+          const response = await fetch("http://localhost:8080/update-score", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ userId, score }),
+          });
+          const data = await response.json();
+          if (data.success) {
+            fetchLeaderboard();
+          }
+        } catch (err) {
+          console.log(err);
+        }
+      });
+
+      async function fetchLeaderboard() {
+        const limit = document.getElementById("limit").value;
+        try {
+          const response = await fetch(
+            `http://localhost:8080/leaderboard?limit=${limit}`
+          );
+          const data = await response.json();
+          if (data.success) {
+            document.getElementById("leaderboard").textContent = JSON.stringify(
+              data.leaderboard,
+              null,
+              2
+            );
+          }
+        } catch (err) {
+          console.error("Error fetching leaderboard:", err);
+        }
+      }
+
+      document
+        .getElementById("refreshBtn")
+        .addEventListener("click", fetchLeaderboard);
+
+      fetchLeaderboard();
+
+      const evtSource = new EventSource(
+        "http://localhost:8080/leaderboard/stream"
+      );
+      evtSource.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.success) {
+          document.getElementById("leaderboard").textContent = JSON.stringify(
+            data.leaderboard,
+            null,
+            2
+          );
+        }
+      };
+
+      evtSource.onerror = () => {
+        console.log("SSE connection closed. Reconnecting...");
+        setTimeout(() => {
+          evtSource.close();
+        }, 1000);
+      };
+    </script>
+  </body>
+</html>
